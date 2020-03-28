@@ -1,0 +1,1 @@
+This section is for accurately determining the difference between two pulls of the same day, pulled at two seperate times.

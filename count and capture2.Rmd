@@ -1,0 +1,174 @@
+---
+title: "Media Monitoring of the 2020 Democratic Primaty Race"
+  date: Sys.Date()
+  output:
+    html_document:
+---
+
+```{r setup}
+library(stringr)
+library(lubridate)
+devtools::install_github("MDShuey/newsanchor")
+library(newsanchor)
+library(rlist)
+#list of candidates and their names. 
+# Having names don't occur often but I'm not sure if the keyword function checks article body too.
+```
+
+```{r example, eval=FALSE}
+Biden <- get_everything(qInTitle = "Biden",
+                        from = Sys.Date() - days(1),
+                        to = Sys.Date() - days(1),
+                        language = "en")
+Biden
+```
+
+We make the cutoff of 100 results per query useful by sorting by popularity.
+
+```{r cc}
+pol_c <- c("Biden","Buttigieg","Sanders","Warren", "Klobuchar", "Bloomberg","Steyer", "Yang", "Bennet", "Sestak")
+
+countcapture <- function(day_ = Sys.Date() - days(1), account_type = "developer") {
+  output <- lapply(pol_c, function(pol) {
+    polpull <- get_everything(qInTitle = pol,
+                              from = day_, to = day_,
+                              language = "en", sort_by = "popularity")
+    if (polpull$metadata$status_code != 200) {stop(paste("Error:", polpull$metadata$status_code, "during candidate:", pol))}
+    if (account_type != "developer"){
+      if (polpull$metadata$total_results > 100) {
+        times <- ceiling((polpull$metadata$total_results)/100)
+        for (i in 2:length(times)){
+          polpull <- list.rbind(polpull, get_everything(qInTitle = pol,
+                                                        from = day_, to = day_,
+                                                        language = "en", sort_by = "popularity",
+                                                        page = i)
+          )
+        }
+      }
+      
+    }
+    polpull
+  }
+  )
+  #finalizing output
+  names(output) <- pol_c
+  output
+}
+
+```
+
+```{r testinggrounds}
+#test
+cc <- countcapture(day_ = '2020-01-26')
+cc2 <- countcapture(day_ = "2020-01-27")
+cc3 <- countcapture(day_ = "2020-01-28")
+cc4 <- countcapture(day_ = "2020-01-29")
+cc5 <- countcapture(day_ = "2020-01-30")
+cc6 <- countcapture(day_ = "2020-01-31")
+
+
+daymerge <- Map(c, cc, cc2)
+daymerge <- Map(c, daymerge, cc3,cc4,cc5,cc6)
+
+save(daymerge, file = '~/january_cc.Rdata')
+
+cc0201 <- countcapture(day_ = "2020-02-01")
+cc0202 <- countcapture(day_ = "2020-02-02")
+cc0203 <- countcapture(day_ = "2020-02-3")
+
+ccFeb <- mapply(pol_c, function(pol){
+  rbind(cc0201[[pol]], cc0202[[pol]])
+}, simplify = F)
+
+newpull <- function(){
+  lf <- list.files("~/GitHub/Portfolio/Part 1- Media Monitoring/countcapture/cc", full.names = T)
+  #filter just the cc names of Rdata files
+  cclf <- lf[grepl("/cc/cc", lf)]
+  # now take out the date
+  dayz <- str_extract(cclf, "\\d\\d-\\d.")
+  #make the full date
+  lastday <- paste0("2020-", dayz[length(dayz)])
+  if(lastday == (Sys.Date() - days(1))) {stop("You're all good Holmes, up-to-date!")}
+  require("lubridate")
+  lastday <- ymd(lastday)
+  #AOTJFT
+  for (i in as.character(seq.Date((lastday + days(1)), (Sys.Date()-days(1)), by = "days")) ) {
+    capture <- countcapture(day_ = i)
+    save(capture, file = paste0('~/GitHub/Portfolio/Part 1- Media Monitoring/countcapture/cc/cc', i,'.Rdata'))
+  }
+}
+
+ for (i in seq.Date(lastday, (Sys.Date()-days(1)))) {
+    capture <- countcapture(day_ = as.character(i))
+    save(capture, file = paste0('~/countcapture/cc/cc',as.character(i),'.Rdata'))
+  }
+
+
+for (j in 3:29) {
+  day <- paste0('2020-02-', j)
+  media <- get_everything(qInTitle = "Trump",
+                      language = 'en',
+                      from = day, to=day,
+                      sort_by = "popularity")
+  save(media, file = paste0("~/countcapture/tcc02-", j, '.Rdata'))
+}
+tcc0203 <- get_everything(qInTitle = "Trump",
+                      language = 'en',
+                      from = '2020-02-03', to='2020-02-03',
+                      sort_by = "popularity")
+
+```
+
+
+```{r candidate_pull}
+
+#this function combines all the Rdata files we've created thus far.
+cc_load <- function(){
+  seq <- seq.Date(ymd('2020-01-26'), (Sys.Date() - days(1)), by = "days")
+  #hard corded, assumptions: sorted alphabetically and only one file per date
+  lf <- list.files("~/GitHub/Portfolio/Part 1- Media Monitoring/countcapture/cc", full.names = T)
+  output <- lapply(lf, function(file){get(load(file))})
+  names(output) <- seq
+  output
+}
+
+media <- cc_load()
+save(media, file ="~/GitHub/Portfolio/Part 1- Media Monitoring/countcapture/media.Rdata")
+
+#use assign() to rename objects using variables
+
+candidate <- function(name) {
+  .combiner <- function(name) {
+    list(
+    metadata = do.call(rbind, lapply(list.files("~/GitHub/CountCapture/cc", full.names = T), function(file){
+      get(load(file))[[name]]$metadata
+    })),
+    
+    results.df = do.call(rbind, lapply(list.files("~/GitHub/CountCapture/cc", full.names = T), function(file){
+      get(load(file))[[name]]$results_df
+    }))
+  )
+  }
+  if(name == "all"){
+    cnds <- lapply(pol_c, candidate)
+    names(cnds) <- pol_c
+    cnds}
+  else{.combiner(name)}
+}
+```
+
+```{r}
+biddy <- candidate("Biden")
+candidates <- candidate("all")
+  
+biddy.authors <- table(biddy$results.df$author)
+
+# "popularity = articles from popular sources and publishers " - NewsAPI Documentation
+biddy.hour_pub <- table(lubridate::hour(with_tz(biddy$results.df$published_at, "EST"))) %>% data.frame()
+
+ggplot(data = biddy.hour_pub) + geom_col(aes(x = Var1, y = Freq)) +labs(title = "Hour of Online Publication of the Most Popular News Sources mentioning Biden", x = "Hour (EST)")
+
+biddy.source.id <- table(biddy$results.df$id) %>% data.frame()
+ggplot(data = ) + geom_col(aes(x = id, y = Freq)) + labs(title = "Most Popular News Sources mentioning Biden", x = "News Source")
+
+```
