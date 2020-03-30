@@ -6,7 +6,7 @@ library(rlist)
 library(taskscheduleR)
 
 Sys.setenv(CC ="C:\\Users\\mds-nuc\\Documents\\GitHub\\CountCapture\\cc")
-NewsAPI_key <- "bc55ce30df4148a1ac5858d424f249bb"
+NewsAPI_key <- "XXXXX"
 pol_c <- c("Biden","Buttigieg","Sanders","Warren", "Klobuchar", "Bloomberg","Steyer", "Yang", "Bennet", "Sestak")
 
 countcapture <- function(day_ = Sys.Date() - days(1), account_type = "developer") {
